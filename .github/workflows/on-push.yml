@@ -12,7 +12,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-      
+
     runs-on: ubuntu-latest
 
     steps:
@@ -49,7 +49,6 @@ jobs:
           artifacts: backend
           entrypoint-file: src/app.js
           entrypoint-function: handler
-          allow-public-access: true
           memory: 1536
 
       # Test 2: Deploy API Gateway with custom domain (main test)

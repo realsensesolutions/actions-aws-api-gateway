@@ -77,7 +77,6 @@ resource "aws_api_gateway_deployment" "this" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = "api"
 
   triggers = {
     redeployment = sha1(jsonencode([
@@ -94,6 +93,18 @@ resource "aws_api_gateway_deployment" "this" {
   }
 }
 
+# Create API Gateway stage
+resource "aws_api_gateway_stage" "this" {
+  deployment_id = aws_api_gateway_deployment.this.id
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  stage_name    = "api"
+
+  tags = {
+    Name   = "api-stage-${var.domain}"
+    Domain = var.domain
+  }
+}
+
 # Create Lambda permission for API Gateway
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowExecutionFromAPIGateway"
@@ -103,7 +114,7 @@ resource "aws_lambda_permission" "api_gateway" {
   source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
 }
 
-# Create ACM certificate for the custom domain
+# Create ACM certificate for the custom domain (REGIONAL)
 resource "aws_acm_certificate" "this" {
   domain_name       = var.domain
   validation_method = "DNS"
@@ -144,8 +155,8 @@ resource "aws_acm_certificate_validation" "this" {
 
 # Create API Gateway custom domain
 resource "aws_api_gateway_domain_name" "this" {
-  domain_name     = var.domain
-  certificate_arn = aws_acm_certificate_validation.this.certificate_arn
+  domain_name              = var.domain
+  regional_certificate_arn = aws_acm_certificate_validation.this.certificate_arn
 
   endpoint_configuration {
     types = ["REGIONAL"]
@@ -160,7 +171,7 @@ resource "aws_api_gateway_domain_name" "this" {
 # Create base path mapping
 resource "aws_api_gateway_base_path_mapping" "this" {
   api_id      = aws_api_gateway_rest_api.this.id
-  stage_name  = aws_api_gateway_deployment.this.stage_name
+  stage_name  = aws_api_gateway_stage.this.stage_name
   domain_name = aws_api_gateway_domain_name.this.domain_name
 }
 

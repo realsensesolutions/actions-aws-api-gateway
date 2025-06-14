@@ -10,7 +10,7 @@ output "api_gateway_arn" {
 
 output "api_gateway_url" {
   description = "URL of the API Gateway"
-  value       = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_deployment.this.stage_name}"
+  value       = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_stage.this.stage_name}"
 }
 
 output "custom_domain_name" {
