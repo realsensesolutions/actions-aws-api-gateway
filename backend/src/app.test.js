@@ -10,10 +10,10 @@ const createApp = () => {
   app.use(express.json());
   app.use(cors());
 
-  // This will be the actual route from app.js (not implemented yet)
-  // app.get('/', (req, res) => {
-  //   res.status(200).json({ message: "hello from API Gateway" });
-  // });
+  // Add the GET / route that we implemented in app.js
+  app.get('/', (req, res) => {
+    res.status(200).json({ message: "hello from API Gateway" });
+  });
 
   app.post('/plus', async (httpReq, httpResp) => {
     const resp = await require('./plus').handler(httpReq);
