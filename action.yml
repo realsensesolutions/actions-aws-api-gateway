@@ -1,0 +1,130 @@
+name: 'AWS API Gateway'
+description: 'Create AWS API Gateway with custom domain and Lambda proxy integration using Terraform'
+author: 'alonch'
+branding:
+  icon: 'globe'
+  color: 'blue'
+
+inputs:
+  action:
+    description: 'Desired outcome: apply, plan or destroy'
+    required: false
+    default: 'apply'
+  domain:
+    description: 'Custom domain for the API Gateway (e.g., api.example.com)'
+    required: true
+  function:
+    description: 'Lambda function ARN to proxy all requests to'
+    required: true
+
+outputs:
+  api_gateway_id:
+    description: 'ID of the API Gateway'
+    value: ${{ steps.outputs.outputs.api_gateway_id }}
+  api_gateway_arn:
+    description: 'ARN of the API Gateway'
+    value: ${{ steps.outputs.outputs.api_gateway_arn }}
+  api_gateway_url:
+    description: 'URL of the API Gateway'
+    value: ${{ steps.outputs.outputs.api_gateway_url }}
+  custom_domain_name:
+    description: 'Custom domain name'
+    value: ${{ steps.outputs.outputs.custom_domain_name }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Search hosted zone domain
+      shell: bash
+      id: route53
+      env: 
+        DOMAIN: ${{ inputs.domain }}
+      run: |
+        HOSTED_ZONE_DOMAIN=$(aws route53 list-hosted-zones --output json | \
+          jq -r '.HostedZones[].Name' | \
+          awk -v domain=${{ env.DOMAIN }}. '{if (index(domain, $0) != 0) print $0}')
+        echo "hosted-zone-domain=$HOSTED_ZONE_DOMAIN" >> $GITHUB_OUTPUT
+
+    - name: Terraform init for apply/plan
+      if: inputs.action != 'destroy'
+      run: |
+        terraform init \
+          -backend-config="bucket=$TF_BACKEND_s3" \
+          -backend-config="dynamodb_table=$TF_BACKEND_dynamodb" \
+          -backend-config="key=$TF_BACKEND_key"
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        TF_BACKEND_key: "actions-aws-api-gateway/${{ inputs.domain }}"
+        TF_VAR_domain: ${{ inputs.domain }}
+        TF_VAR_function_arn: ${{ inputs.function }}
+        TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+
+    - name: Terraform plan
+      if: inputs.action == 'plan'
+      run: terraform plan
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        TF_VAR_domain: ${{ inputs.domain }}
+        TF_VAR_function_arn: ${{ inputs.function }}
+        TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+
+    - name: Terraform init and destroy
+      if: inputs.action == 'destroy'
+      run: |
+        echo "Initializing Terraform for destroy operation..."
+        terraform init \
+          -backend-config="bucket=$TF_BACKEND_s3" \
+          -backend-config="dynamodb_table=$TF_BACKEND_dynamodb" \
+          -backend-config="key=$TF_BACKEND_key"
+
+        echo "Destroying resources..."
+        terraform destroy -auto-approve
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        TF_BACKEND_key: "actions-aws-api-gateway/${{ inputs.domain }}"
+        TF_VAR_domain: ${{ inputs.domain }}
+        TF_VAR_function_arn: ${{ inputs.function }}
+        TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+
+    - name: Terraform apply
+      id: terraform
+      if: inputs.action == 'apply'
+      run: |
+        terraform apply -auto-approve
+        API_GATEWAY_ID=$(terraform output -raw api_gateway_id | tr -d '\r\n')
+        API_GATEWAY_ARN=$(terraform output -raw api_gateway_arn | tr -d '\r\n')
+        API_GATEWAY_URL=$(terraform output -raw api_gateway_url | tr -d '\r\n')
+        CUSTOM_DOMAIN_NAME=$(terraform output -raw custom_domain_name | tr -d '\r\n')
+
+        # Set outputs temporarily
+        echo "api_gateway_id=$API_GATEWAY_ID" >> "$GITHUB_OUTPUT"
+        echo "api_gateway_arn=$API_GATEWAY_ARN" >> "$GITHUB_OUTPUT"
+        echo "api_gateway_url=$API_GATEWAY_URL" >> "$GITHUB_OUTPUT"
+        echo "custom_domain_name=$CUSTOM_DOMAIN_NAME" >> "$GITHUB_OUTPUT"
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        TF_VAR_domain: ${{ inputs.domain }}
+        TF_VAR_function_arn: ${{ inputs.function }}
+        TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+
+    - name: Set final outputs
+      id: outputs
+      shell: bash
+      run: |
+        if [ "${{ inputs.action }}" == "destroy" ]; then
+          # For destroy action, we don't have meaningful outputs
+          echo "api_gateway_id=destroyed" >> "$GITHUB_OUTPUT"
+          echo "api_gateway_arn=destroyed" >> "$GITHUB_OUTPUT"
+          echo "api_gateway_url=destroyed" >> "$GITHUB_OUTPUT"
+          echo "custom_domain_name=destroyed" >> "$GITHUB_OUTPUT"
+        else
+          # Always use Terraform outputs for apply/plan actions
+          echo "api_gateway_id=${{ steps.terraform.outputs.api_gateway_id }}" >> "$GITHUB_OUTPUT"
+          echo "api_gateway_arn=${{ steps.terraform.outputs.api_gateway_arn }}" >> "$GITHUB_OUTPUT"
+          echo "api_gateway_url=${{ steps.terraform.outputs.api_gateway_url }}" >> "$GITHUB_OUTPUT"
+          echo "custom_domain_name=${{ steps.terraform.outputs.custom_domain_name }}" >> "$GITHUB_OUTPUT"
+        fi

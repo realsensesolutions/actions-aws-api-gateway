@@ -1,0 +1,124 @@
+name: demo
+on:
+  push:
+    branches:
+      - main
+env:
+  region: us-east-1
+  domain: api-gateway.dev.realsense.ca
+jobs:
+
+  deploy:
+    permissions:
+      id-token: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.region }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: ${{ github.repository_owner }}-${{ github.actor }}
+
+      - uses: alonch/actions-aws-backend-setup@main
+        with:
+          instance: webapp-demo-go
+
+      - name: Install Node.js for backend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend
+          
+      - name: Install backend dependencies
+        working-directory: backend  
+        run: npm install
+
+      # Test 1: Deploy Lambda function
+      - name: Deploy Lambda function
+        uses: alonch/actions-aws-function-node@main
+        id: backend
+        with: 
+          name: actions-aws-api-gateway
+          artifacts: backend
+          entrypoint-file: src/app.js
+          entrypoint-function: handler
+          allow-public-access: true
+          memory: 1536
+
+      # Test 2: Deploy API Gateway with custom domain (main test)
+      - name: Deploy API Gateway with custom domain
+        uses: ./
+        id: api_gateway
+        with: 
+          domain: ${{ env.domain }}
+          function: ${{ steps.backend.outputs.arn }}
+
+      # Test 3: Validate API Gateway outputs
+      - name: Validate API Gateway deployment
+        run: |
+          echo "Testing API Gateway outputs..."
+          
+          if [ -z "${{ steps.api_gateway.outputs.api_gateway_id }}" ]; then
+            echo "❌ TEST FAILED: API Gateway ID is empty"
+            exit 1
+          fi
+          echo "✅ TEST PASSED: API Gateway ID: ${{ steps.api_gateway.outputs.api_gateway_id }}"
+          
+          if [ -z "${{ steps.api_gateway.outputs.api_gateway_arn }}" ]; then
+            echo "❌ TEST FAILED: API Gateway ARN is empty"
+            exit 1
+          fi
+          echo "✅ TEST PASSED: API Gateway ARN: ${{ steps.api_gateway.outputs.api_gateway_arn }}"
+          
+          if [ -z "${{ steps.api_gateway.outputs.api_gateway_url }}" ]; then
+            echo "❌ TEST FAILED: API Gateway URL is empty"
+            exit 1
+          fi
+          echo "✅ TEST PASSED: API Gateway URL: ${{ steps.api_gateway.outputs.api_gateway_url }}"
+          
+          if [ "${{ steps.api_gateway.outputs.custom_domain_name }}" != "${{ env.domain }}" ]; then
+            echo "❌ TEST FAILED: Custom domain name mismatch"
+            echo "Expected: ${{ env.domain }}"
+            echo "Got: ${{ steps.api_gateway.outputs.custom_domain_name }}"
+            exit 1
+          fi
+          echo "✅ TEST PASSED: Custom domain name: ${{ steps.api_gateway.outputs.custom_domain_name }}"
+
+      # Test 5: Test API Gateway endpoint (basic connectivity)
+      - name: Test API Gateway endpoint
+        run: |
+          echo "Testing API Gateway endpoint connectivity..."
+          API_URL="${{ steps.api_gateway.outputs.api_gateway_url }}"
+          
+          # Test the direct API Gateway URL (should be immediately accessible)
+          echo "Testing direct API Gateway URL: $API_URL"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL" || echo "000")
+          
+          if [ "$HTTP_STATUS" = "000" ]; then
+            echo "❌ TEST FAILED: Could not connect to API Gateway"
+            exit 1
+          elif [ "$HTTP_STATUS" -ge "200" ] && [ "$HTTP_STATUS" -lt "300" ]; then
+            echo "✅ TEST PASSED: API Gateway responded with HTTP $HTTP_STATUS"
+          elif [ "$HTTP_STATUS" -ge "400" ] && [ "$HTTP_STATUS" -lt "500" ]; then
+            echo "✅ TEST PASSED: API Gateway accessible (HTTP $HTTP_STATUS - client error expected without proper request)"
+          else
+            echo "⚠️  WARNING: API Gateway responded with HTTP $HTTP_STATUS"
+          fi
+          
+          # Note: Custom domain may take time for DNS propagation, so we don't test it immediately
+
+      # Test 6: Output final results
+      - name: Output deployment results
+        run: |
+          echo "🎉 All tests passed! Deployment summary:"
+          echo "Lambda Function ARN: ${{ steps.backend.outputs.arn }}"
+          echo "API Gateway ID: ${{ steps.api_gateway.outputs.api_gateway_id }}"
+          echo "API Gateway URL: ${{ steps.api_gateway.outputs.api_gateway_url }}"
+          echo "Custom Domain: ${{ steps.api_gateway.outputs.custom_domain_name }}"
+          echo ""
+          echo "💡 Note: Custom domain DNS propagation may take up to 48 hours"
