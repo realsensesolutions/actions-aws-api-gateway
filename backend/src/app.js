@@ -10,6 +10,10 @@ app.use(
   cors(),
 );
 
+app.get('/', (req, res) => {
+  res.status(200).json({ message: "hello from API Gateway" });
+});
+
 app.post('/plus', async (httpReq, httpResp) => {
   const resp = await require('./plus').handler(httpReq);
   httpResp
