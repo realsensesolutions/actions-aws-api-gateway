@@ -50,6 +50,7 @@ runs:
       run: |
         terraform init \
           -backend-config="bucket=$TF_BACKEND_s3" \
+          -backend-config="use_lockfile=true" \
           -backend-config="dynamodb_table=$TF_BACKEND_dynamodb" \
           -backend-config="key=$TF_BACKEND_key"
       shell: bash
@@ -76,6 +77,7 @@ runs:
         echo "Initializing Terraform for destroy operation..."
         terraform init \
           -backend-config="bucket=$TF_BACKEND_s3" \
+          -backend-config="use_lockfile=true" \
           -backend-config="dynamodb_table=$TF_BACKEND_dynamodb" \
           -backend-config="key=$TF_BACKEND_key"
 
