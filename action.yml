@@ -13,6 +13,10 @@ inputs:
   domain:
     description: 'Custom domain for the API Gateway (e.g., api.example.com)'
     required: true
+  hosted-zone-id:
+    description: 'Explicit public Route53 zone ID; omitted uses automatic discovery'
+    required: false
+    default: ''
   function:
     description: 'Lambda function ARN to proxy all requests to'
     required: true
@@ -34,7 +38,12 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+      with:
+        terraform_version: 1.16.6
+        terraform_wrapper: false
     - name: Search hosted zone domain
+      if: inputs.hosted-zone-id == ''
       shell: bash
       id: route53
       env: 
@@ -48,7 +57,7 @@ runs:
     - name: Terraform init for apply/plan
       if: inputs.action != 'destroy'
       run: |
-        terraform init \
+        terraform init -input=false -reconfigure -lockfile=readonly \
           -backend-config="bucket=$TF_BACKEND_s3" \
           -backend-config="use_lockfile=true" \
           -backend-config="key=$TF_BACKEND_key"
@@ -59,6 +68,7 @@ runs:
         TF_VAR_domain: ${{ inputs.domain }}
         TF_VAR_function_arn: ${{ inputs.function }}
         TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+        TF_VAR_hosted_zone_id: ${{ inputs.hosted-zone-id }}
 
     - name: Terraform plan
       if: inputs.action == 'plan'
@@ -69,12 +79,13 @@ runs:
         TF_VAR_domain: ${{ inputs.domain }}
         TF_VAR_function_arn: ${{ inputs.function }}
         TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+        TF_VAR_hosted_zone_id: ${{ inputs.hosted-zone-id }}
 
     - name: Terraform init and destroy
       if: inputs.action == 'destroy'
       run: |
         echo "Initializing Terraform for destroy operation..."
-        terraform init \
+        terraform init -input=false -reconfigure -lockfile=readonly \
           -backend-config="bucket=$TF_BACKEND_s3" \
           -backend-config="use_lockfile=true" \
           -backend-config="key=$TF_BACKEND_key"
@@ -88,6 +99,7 @@ runs:
         TF_VAR_domain: ${{ inputs.domain }}
         TF_VAR_function_arn: ${{ inputs.function }}
         TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+        TF_VAR_hosted_zone_id: ${{ inputs.hosted-zone-id }}
 
     - name: Terraform apply
       id: terraform
@@ -110,6 +122,7 @@ runs:
         TF_VAR_domain: ${{ inputs.domain }}
         TF_VAR_function_arn: ${{ inputs.function }}
         TF_VAR_hosted_zone_domain: ${{ steps.route53.outputs.hosted-zone-domain }}
+        TF_VAR_hosted_zone_id: ${{ inputs.hosted-zone-id }}
 
     - name: Set final outputs
       id: outputs

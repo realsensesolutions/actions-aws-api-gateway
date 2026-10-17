@@ -3,7 +3,8 @@ data "aws_region" "current" {}
 
 # Get the Route53 hosted zone
 data "aws_route53_zone" "hosted_zone" {
-  name         = var.hosted_zone_domain
+  zone_id      = var.hosted_zone_id != "" ? var.hosted_zone_id : null
+  name         = var.hosted_zone_id == "" ? var.hosted_zone_domain : null
   private_zone = false
 }
 
@@ -85,6 +86,8 @@ resource "aws_api_gateway_deployment" "this" {
       aws_api_gateway_integration.lambda_proxy.id,
       aws_api_gateway_method.root.id,
       aws_api_gateway_integration.lambda_root.id,
+      aws_api_gateway_integration.lambda_proxy.uri,
+      aws_api_gateway_integration.lambda_root.uri,
     ]))
   }
 
@@ -109,7 +112,8 @@ resource "aws_api_gateway_stage" "this" {
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = var.function_arn
+  function_name = join(":", slice(split(":", var.function_arn), 0, 7))
+  qualifier     = length(split(":", var.function_arn)) > 7 ? split(":", var.function_arn)[7] : null
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
 }
