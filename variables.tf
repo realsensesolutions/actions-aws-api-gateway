@@ -21,16 +21,9 @@ variable "function_arn" {
 variable "hosted_zone_domain" {
   description = "Route53 hosted zone domain name (found by the hosted zone search)"
   type        = string
-  default     = ""
 
   validation {
-    condition     = var.hosted_zone_id != "" || length(var.hosted_zone_domain) > 0
-    error_message = "Provide hosted_zone_id or hosted_zone_domain."
+    condition     = length(var.hosted_zone_domain) > 0
+    error_message = "Hosted zone domain cannot be empty"
   }
-}
-
-variable "hosted_zone_id" {
-  description = "Explicit public hosted zone ID; takes precedence over hosted_zone_domain"
-  type        = string
-  default     = ""
 }

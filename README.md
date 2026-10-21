@@ -55,7 +55,6 @@ jobs:
 | Name       | Description                                      | Required | Default |
 |------------|--------------------------------------------------|----------|---------|
 | `domain`   | Custom domain for the API Gateway (e.g., api.example.com) | Yes      | -       |
-| `hosted-zone-id` | Explicit public Route53 zone ID; omit for automatic detection | No | `""` |
 | `function` | Lambda function ARN to proxy all requests to    | Yes      | -       |
 | `action`   | Desired outcome: `apply`, `plan`, or `destroy`   | No       | `apply` |
 
@@ -75,20 +74,6 @@ jobs:
 3. **SSL Certificate** - Requests and validates an ACM certificate using DNS validation
 4. **Custom Domain** - Configures API Gateway custom domain with the SSL certificate
 5. **DNS Configuration** - Creates Route53 A record pointing to the API Gateway
-
-When parent and child hosted zones coexist, pass `hosted-zone-id` to select the zone that owns the API and certificate validation records. Omitting it retains automatic zone detection.
-
-```yaml
-- uses: realsensesolutions/actions-aws-api-gateway@main
-  with:
-    domain: api.sandbox.example.com
-    hosted-zone-id: Z0123456789EXAMPLE
-    function: arn:aws:lambda:us-east-1:123456789012:function:my-api
-```
-
-The `function` input also accepts a qualified version or alias ARN. The integration uses that full ARN; its invocation permission stores the function and qualifier separately. Changing the target ARN triggers an API deployment.
-
-This action retains the original Terraform resource addresses and the `actions-aws-api-gateway/<domain>` state key. It uses Terraform 1.16.6 and a committed AWS provider 5.100.0 lock file. Local validation: `terraform init -backend=false -lockfile=readonly`, `terraform validate`, and `terraform test`; the tests use mock providers and make no AWS calls.
 
 ## Route Configuration
 
